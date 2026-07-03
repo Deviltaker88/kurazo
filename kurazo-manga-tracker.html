@@ -259,6 +259,44 @@
   .set-total-row{display:flex;gap:8px;align-items:center;margin-bottom:10px;}
   .set-total-row input{width:70px;}
 
+  .sh-cover{cursor:pointer;position:relative;}
+  .sh-cover::after{
+    content:'☰';
+    position:absolute;bottom:-1px;right:-1px;
+    background:var(--sumi);color:var(--washi);
+    font-size:9px;line-height:1;padding:2px 3px;
+    border:1px solid var(--washi);
+  }
+
+  /* ---------- Tenda (storico volumi) ---------- */
+  .tenda-overlay{
+    position:fixed;inset:0;z-index:1000;
+    background:rgba(20,18,15,0.55);
+    display:flex;align-items:flex-start;justify-content:center;
+  }
+  .tenda-panel{
+    background:var(--washi);
+    width:100%;max-width:640px;max-height:82vh;
+    overflow-y:auto;
+    border-bottom:2px solid var(--sumi);
+    box-shadow:0 6px 0 var(--sumi);
+    padding:16px;
+    transform:translateY(-100%);
+    animation:tenda-drop 0.26s cubic-bezier(.2,.8,.3,1) forwards;
+  }
+  @keyframes tenda-drop{ to{ transform:translateY(0); } }
+  .tenda-head{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid var(--sumi);}
+  .tenda-head img{width:40px;height:56px;object-fit:cover;border:1px solid var(--sumi);flex-shrink:0;}
+  .tenda-head .th-title{font-weight:700;font-size:15px;flex:1;line-height:1.25;}
+  .tenda-close{border:1.5px solid var(--sumi);background:var(--washi);color:var(--sumi);cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:11px;padding:7px 10px;box-shadow:2px 2px 0 var(--sumi);flex-shrink:0;}
+  .tenda-close:active{transform:translate(2px,2px);box-shadow:none;}
+  .log-entry{display:flex;align-items:center;gap:10px;border:1px solid var(--sumi);background:#fff;padding:8px 10px;margin-bottom:6px;}
+  .log-entry .le-vol{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;background:var(--sumi);color:var(--washi);min-width:30px;text-align:center;padding:5px 0;flex-shrink:0;}
+  .log-entry .le-info{flex:1;min-width:0;}
+  .log-entry .le-date{font-family:'JetBrains Mono',monospace;font-size:11px;color:#6b675e;}
+  .le-source{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:0.04em;background:var(--ai);color:var(--washi);padding:2px 5px;border-radius:2px;margin-left:6px;vertical-align:middle;}
+  .log-empty{text-align:center;padding:22px 10px;color:#6b675e;font-size:13px;line-height:1.5;}
+
   footer.note{padding:14px 16px 30px;font-size:11px;color:#8a8578;line-height:1.6;text-align:center;}
 </style>
 </head>
@@ -422,21 +460,75 @@ async function lookupIsbn(isbn){
 }
 
 /* ===================== LIBRARY MUTATIONS ===================== */
-async function addVolumeToLibrary({seriesTitle, coverImage, totalVolumes, volumeNumber, publisher}){
+async function addVolumeToLibrary({seriesTitle, coverImage, totalVolumes, volumeNumber, publisher, source}){
   const pub = publisher? normalizePublisherLabel(publisher) : null;
   const key = seriesKeyFromTitle(seriesTitle, pub);
   if(!LIB[key]){
-    LIB[key] = { title: seriesTitle, publisher: pub, cover: coverImage||null, total: totalVolumes||null, owned: [] };
+    LIB[key] = { title: seriesTitle, publisher: pub, cover: coverImage||null, total: totalVolumes||null, owned: [], log: [] };
   }
+  if(!LIB[key].log) LIB[key].log = [];
   if(pub && !LIB[key].publisher) LIB[key].publisher = pub;
   if(coverImage && !LIB[key].cover) LIB[key].cover = coverImage;
   if(totalVolumes && !LIB[key].total) LIB[key].total = totalVolumes;
-  if(volumeNumber && !LIB[key].owned.includes(volumeNumber)){
-    LIB[key].owned.push(volumeNumber);
-    LIB[key].owned.sort((a,b)=>a-b);
+  if(volumeNumber){
+    if(!LIB[key].owned.includes(volumeNumber)){
+      LIB[key].owned.push(volumeNumber);
+      LIB[key].owned.sort((a,b)=>a-b);
+    }
+    // registra ogni scansione/aggiunta nello storico, anche se il volume era già posseduto
+    LIB[key].log.push({num: volumeNumber, date: Date.now(), source: source || 'manuale'});
+    LIB[key].log.sort((a,b)=>b.date-a.date);
   }
   await saveLibrary(LIB);
   return key;
+}
+
+/* ===================== STORICO VOLUMI (tenda) ===================== */
+function sourceLabel(src){
+  if(src==='ocr') return 'dorso';
+  if(src==='barcode') return 'isbn';
+  return 'manuale';
+}
+function formatLogDate(ts){
+  try{
+    return new Date(ts).toLocaleString('it-IT', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  }catch(e){ return ''; }
+}
+function openVolumeLog(key){
+  const s = LIB[key];
+  if(!s) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'tenda-overlay';
+  const entries = (s.log && s.log.length) ? s.log.slice().sort((a,b)=>b.date-a.date) : null;
+  let bodyHtml;
+  if(entries && entries.length){
+    bodyHtml = entries.map(e=>`
+      <div class="log-entry">
+        <div class="le-vol">${e.num}</div>
+        <div class="le-info">
+          <div class="le-date">${formatLogDate(e.date)}<span class="le-source">${sourceLabel(e.source)}</span></div>
+        </div>
+      </div>`).join('');
+  } else if(s.owned && s.owned.length){
+    bodyHtml = `<div class="log-empty">Nessuno storico dettagliato per questi volumi (aggiunti prima di questo aggiornamento).<br><b>Volumi presenti:</b> ${s.owned.join(', ')}</div>`;
+  } else {
+    bodyHtml = `<div class="log-empty">Nessun volume ancora registrato per questa serie.</div>`;
+  }
+  overlay.innerHTML = `
+    <div class="tenda-panel">
+      <div class="tenda-head">
+        ${s.cover? `<img src="${s.cover}" alt="">` : ''}
+        <div class="th-title">${escapeHtml(s.title)}</div>
+        <button class="tenda-close" id="tenda-close">Chiudi ✕</button>
+      </div>
+      ${bodyHtml}
+    </div>
+  `;
+  overlay.addEventListener('click', (e)=>{ if(e.target===overlay) document.body.removeChild(overlay); });
+  document.body.appendChild(overlay);
+  overlay.querySelector('#tenda-close').addEventListener('click', ()=>{
+    if(overlay.parentNode) document.body.removeChild(overlay);
+  });
 }
 
 /* ===================== VIEW ROUTER ===================== */
@@ -491,7 +583,7 @@ function renderLibrary(){
     card.className = 'series-card';
     card.innerHTML = `
       <div class="series-head" data-key="${key}">
-        ${s.cover? `<img src="${s.cover}" alt="">` : `<div style="width:44px;height:62px;background:var(--nezumi);border:1px solid var(--sumi);flex-shrink:0;"></div>`}
+        ${s.cover? `<img class="sh-cover" src="${s.cover}" alt="" title="Vedi storico volumi">` : `<div class="sh-cover" style="width:44px;height:62px;background:var(--nezumi);border:1px solid var(--sumi);flex-shrink:0;" title="Vedi storico volumi"></div>`}
         <div class="sh-info">
           <div class="sh-title">${s.publisher? `<span class="pub-badge">${escapeHtml(s.publisher)}</span>`:''}${escapeHtml(s.title)}</div>
           <div class="sh-sub">${total? (ownedCount+' / '+total+' volumi') : (ownedCount+' volumi · totale sconosciuto')}</div>
@@ -503,6 +595,11 @@ function renderLibrary(){
     wrap.appendChild(card);
     const head = card.querySelector('.series-head');
     const body = card.querySelector('.series-body');
+    const coverEl = card.querySelector('.sh-cover');
+    coverEl.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      openVolumeLog(key);
+    });
     head.addEventListener('click', ()=>{
       const open = body.style.display !== 'none';
       body.style.display = open? 'none':'block';
@@ -546,7 +643,12 @@ function renderSeriesBody(container, key){
     slot.addEventListener('click', async ()=>{
       const idx = s.owned.indexOf(i);
       if(idx>=0){ s.owned.splice(idx,1); }
-      else{ s.owned.push(i); s.owned.sort((a,b)=>a-b); }
+      else{
+        s.owned.push(i); s.owned.sort((a,b)=>a-b);
+        if(!s.log) s.log = [];
+        s.log.push({num:i, date:Date.now(), source:'manuale'});
+        s.log.sort((a,b)=>b.date-a.date);
+      }
       await saveLibrary(LIB);
       renderSeriesBody(container,key);
       renderLibrary();
@@ -793,11 +895,11 @@ function showOcrConfirmForm(container, guessedTitle, guessedVol, guessedPublishe
     const vol = parseInt(container.querySelector('#f-vol').value,10) || null;
     const publisher = container.querySelector('#f-publisher').value.trim() || null;
     if(!title){ alert('Inserisci almeno un titolo da cercare.'); return; }
-    await runSeriesSearch(container.querySelector('#f-candidates'), title, vol, publisher);
+    await runSeriesSearch(container.querySelector('#f-candidates'), title, vol, publisher, 'ocr');
   });
 }
 
-async function runSeriesSearch(candContainer, title, vol, publisher){
+async function runSeriesSearch(candContainer, title, vol, publisher, source){
   candContainer.innerHTML = `<div class="status-line">Cerco "${escapeHtml(title)}" nel database manga…</div>`;
   const results = await searchAniList(title);
   if(results === null){
@@ -805,7 +907,7 @@ async function runSeriesSearch(candContainer, title, vol, publisher){
       <div class="status-line err">Ricerca serie non disponibile in questo momento.</div>
       <div class="cam-actions"><button class="btn primary" id="add-anyway">Aggiungi comunque "${escapeHtml(title)}" con questi dati</button></div>`;
     candContainer.querySelector('#add-anyway').addEventListener('click', async ()=>{
-      await addVolumeToLibrary({seriesTitle:title, volumeNumber:vol, publisher});
+      await addVolumeToLibrary({seriesTitle:title, volumeNumber:vol, publisher, source});
       confirmAdded(candContainer, title, vol, publisher);
     });
     return;
@@ -815,7 +917,7 @@ async function runSeriesSearch(candContainer, title, vol, publisher){
       <div class="status-line">Nessuna corrispondenza trovata nel database.</div>
       <div class="cam-actions"><button class="btn primary" id="add-anyway">Aggiungi comunque "${escapeHtml(title)}"</button></div>`;
     candContainer.querySelector('#add-anyway').addEventListener('click', async ()=>{
-      await addVolumeToLibrary({seriesTitle:title, volumeNumber:vol, publisher});
+      await addVolumeToLibrary({seriesTitle:title, volumeNumber:vol, publisher, source});
       confirmAdded(candContainer, title, vol, publisher);
     });
     return;
@@ -837,7 +939,8 @@ async function runSeriesSearch(candContainer, title, vol, publisher){
         coverImage: m.coverImage && m.coverImage.medium,
         totalVolumes: m.volumes || null,
         volumeNumber: vol,
-        publisher
+        publisher,
+        source
       });
       confirmAdded(candContainer, name, vol, publisher);
     });
@@ -938,7 +1041,7 @@ function renderBarcode(){
         const vol = extractVolumeNumber(t);
         const title = t.replace(/vol(?:ume)?\.?\s*\d{1,3}/i,'').trim();
         const publisher = resultEl.querySelector('#bc-publisher').value.trim() || null;
-        await runSeriesSearch(resultEl, title||t, vol, publisher);
+        await runSeriesSearch(resultEl, title||t, vol, publisher, 'barcode');
       });
       return;
     }
@@ -959,7 +1062,7 @@ function renderBarcode(){
       const title = resultEl.querySelector('#f-title').value.trim();
       const vol = parseInt(resultEl.querySelector('#f-vol').value,10) || null;
       const publisher = resultEl.querySelector('#f-publisher').value.trim() || null;
-      await runSeriesSearch(resultEl.querySelector('#f-candidates'), title, vol, publisher);
+      await runSeriesSearch(resultEl.querySelector('#f-candidates'), title, vol, publisher, 'barcode');
     });
   });
 }
@@ -983,7 +1086,7 @@ function renderManual(){
     const t = input.value.trim();
     if(!t) return;
     const publisher = pubInput.value.trim() || null;
-    await runSeriesSearch(document.getElementById('m-candidates'), t, null, publisher);
+    await runSeriesSearch(document.getElementById('m-candidates'), t, null, publisher, 'manuale');
   };
   document.getElementById('m-search').addEventListener('click', go);
   input.addEventListener('keydown', e=>{ if(e.key==='Enter') go(); });
