@@ -868,10 +868,10 @@ function renderBarcode(){
     }
     if(!book){
       resultEl.innerHTML = `
-        <div class="status-line err">${lookupFailed? 'Impossibile contattare i database libri. Controlla la connessione oppure inserisci il titolo a mano.' : 'ISBN non trovato né su Google Books né su Open Library.'}</div>
-        <label>Titolo (inserisci manualmente)</label>
-        <input type="text" id="bc-title" placeholder="es. One Piece Vol. 12">
-        <div class="cam-actions"><button class="btn primary" id="bc-retry">Riprova scansione</button><button class="btn" id="bc-manual">Cerca con questo titolo</button></div>`;
+        <div class="status-line err">${lookupFailed? 'Impossibile contattare i database libri. Controlla la connessione oppure inserisci il titolo a mano.' : `ISBN ${code} non trovato nei database generici di libri (Google Books, Open Library). È normale per edizioni manga italiane di nicchia — spesso non sono indicizzate lì. Scrivi il titolo qui sotto: verrà cercato nel database manga (AniList), molto più affidabile per questi casi.`}</div>
+        <label>Titolo serie (es. nome del manga, senza numero volume)</label>
+        <input type="text" id="bc-title" placeholder="es. Centuria">
+        <div class="cam-actions"><button class="btn primary" id="bc-manual">Cerca nel database manga</button><button class="btn ghost" id="bc-retry">Riprova scansione</button></div>`;
       resultEl.querySelector('#bc-retry').addEventListener('click', ()=> renderBarcode());
       resultEl.querySelector('#bc-manual').addEventListener('click', async ()=>{
         const t = resultEl.querySelector('#bc-title').value.trim();
