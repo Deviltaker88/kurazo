@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>蔵書 Kurazō — la tua libreria manga</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&family=Zen+Maru+Gothic:wght@400;500;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/0.1.1/tesseract.min.js"></script>
+<style>
+  :root{
+    --sumi:#14120f;       /* ink black */
+    --washi:#f3eee4;      /* paper */
+    --washi-dim:#e8e1d2;
+    --beni:#c4302b;       /* obi red */
+    --beni-dark:#8f211d;
+    --nezumi:#a9a297;     /* halftone grey */
+    --ai:#33475b;         /* indigo accent */
+    --kin:#c99a3e;        /* gold */
+    --line:#14120f;
+    --radius:2px;
+    font-size:16px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--washi);
+    color:var(--sumi);
+    font-family:'Zen Maru Gothic', sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  #app{max-width:640px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;background:var(--washi);
+    background-image:
+      radial-gradient(var(--nezumi) 0.6px, transparent 0.6px);
+    background-size:10px 10px;
+    background-position:-4px -4px;
+    border-left:1px solid var(--sumi);
+    border-right:1px solid var(--sumi);
+  }
+
+  /* ---------- Masthead ---------- */
+  .masthead{
+    background:var(--sumi);
+    color:var(--washi);
+    padding:22px 20px 18px;
+    position:relative;
+    border-bottom:4px solid var(--beni);
+  }
+  .masthead .kicker{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    letter-spacing:0.18em;
+    text-transform:uppercase;
+    color:var(--kin);
+    display:block;
+    margin-bottom:4px;
+  }
+  .masthead h1{
+    font-family:'Zen Kaku Gothic New',sans-serif;
+    font-weight:900;
+    font-size:32px;
+    line-height:1;
+    margin:0;
+    letter-spacing:0.01em;
+  }
+  .masthead h1 .jp{color:var(--beni);margin-right:10px;}
+  .masthead p{margin:8px 0 0;font-size:13px;color:var(--washi-dim);opacity:0.85;}
+
+  /* ---------- Tabs ---------- */
+  .tabs{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    border-bottom:2px solid var(--sumi);
+    background:var(--washi);
+  }
+  .tabs button{
+    font-family:'Zen Kaku Gothic New',sans-serif;
+    font-weight:700;
+    font-size:11.5px;
+    letter-spacing:0.02em;
+    padding:12px 4px;
+    background:transparent;
+    border:none;
+    border-right:1px solid var(--sumi);
+    color:var(--sumi);
+    cursor:pointer;
+    display:flex;flex-direction:column;align-items:center;gap:4px;
+  }
+  .tabs button:last-child{border-right:none;}
+  .tabs button .tnum{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--nezumi);}
+  .tabs button.active{background:var(--beni);color:var(--washi);}
+  .tabs button.active .tnum{color:#f0c9c7;}
+
+  main{flex:1;padding:16px;padding-bottom:60px;}
+
+  /* ---------- Panels / cards shared ---------- */
+  .panel{
+    background:var(--washi);
+    border:1.5px solid var(--sumi);
+    box-shadow:3px 3px 0 var(--sumi);
+    padding:14px;
+    margin-bottom:16px;
+  }
+  .hint{font-size:12.5px;color:#5a564d;line-height:1.5;margin:0 0 10px;}
+  .hint b{color:var(--sumi);}
+
+  /* ---------- Camera ---------- */
+  .camera-wrap{
+    position:relative;
+    border:2px solid var(--sumi);
+    background:#000;
+    aspect-ratio:3/4;
+    overflow:hidden;
+    box-shadow:4px 4px 0 var(--sumi);
+  }
+  .camera-wrap video{width:100%;height:100%;object-fit:cover;display:block;}
+  .camera-wrap canvas{display:none;}
+  .corner{position:absolute;width:22px;height:22px;border-color:var(--beni);border-style:solid;}
+  .c-tl{top:10px;left:10px;border-width:3px 0 0 3px;}
+  .c-tr{top:10px;right:10px;border-width:3px 3px 0 0;}
+  .c-bl{bottom:10px;left:10px;border-width:0 0 3px 3px;}
+  .c-br{bottom:10px;right:10px;border-width:0 3px 3px 0;}
+  .guide-line{
+    position:absolute;left:6%;right:6%;top:50%;height:2px;background:var(--beni);opacity:0.85;
+  }
+  .guide-line::before,.guide-line::after{
+    content:'';position:absolute;top:-4px;width:2px;height:10px;background:var(--beni);
+  }
+  .guide-line::before{left:0;}
+  .guide-line::after{right:0;}
+  .camera-caption{
+    position:absolute;bottom:0;left:0;right:0;
+    background:rgba(20,18,15,0.72);
+    color:var(--washi);
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    padding:6px 10px;
+    text-align:center;
+  }
+  .cam-actions{display:flex;gap:10px;margin-top:12px;}
+  .cam-placeholder{
+    height:100%;display:flex;align-items:center;justify-content:center;
+    color:var(--nezumi);font-size:13px;text-align:center;padding:20px;
+  }
+
+  /* ---------- Buttons ---------- */
+  .btn{
+    font-family:'Zen Kaku Gothic New',sans-serif;
+    font-weight:700;
+    font-size:14px;
+    border:1.5px solid var(--sumi);
+    background:var(--washi);
+    color:var(--sumi);
+    padding:11px 16px;
+    cursor:pointer;
+    box-shadow:2px 2px 0 var(--sumi);
+    flex:1;
+  }
+  .btn:active{transform:translate(2px,2px);box-shadow:none;}
+  .btn.primary{background:var(--beni);color:var(--washi);border-color:var(--beni-dark);box-shadow:2px 2px 0 var(--beni-dark);}
+  .btn.ghost{box-shadow:none;background:transparent;}
+  .btn:disabled{opacity:0.4;cursor:not-allowed;}
+  .btn.small{flex:none;padding:7px 10px;font-size:12px;}
+
+  /* ---------- Forms ---------- */
+  label{display:block;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ai);margin:12px 0 4px;}
+  input[type=text],input[type=number]{
+    width:100%;
+    border:1.5px solid var(--sumi);
+    background:#fff;
+    padding:10px;
+    font-size:15px;
+    font-family:'Zen Maru Gothic',sans-serif;
+    color:var(--sumi);
+  }
+  input:focus{outline:2px solid var(--ai);outline-offset:1px;}
+
+  .status-line{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    padding:8px 10px;
+    border:1px dashed var(--nezumi);
+    color:#5a564d;
+    margin-top:10px;
+  }
+  .status-line.ok{border-color:var(--beni);color:var(--beni-dark);}
+  .status-line.err{border-color:var(--beni-dark);color:var(--beni-dark);background:#fbeceb;}
+
+  /* candidate results */
+  .cand{
+    display:flex;gap:10px;align-items:center;
+    border:1px solid var(--sumi);padding:8px;margin-top:8px;cursor:pointer;background:#fff;
+  }
+  .cand:hover{background:var(--washi-dim);}
+  .cand img{width:42px;height:60px;object-fit:cover;border:1px solid var(--sumi);flex-shrink:0;background:var(--nezumi);}
+  .cand .ci{flex:1;min-width:0;}
+  .cand .ci .t{font-weight:700;font-size:13.5px;line-height:1.25;}
+  .cand .ci .m{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#6b675e;margin-top:2px;}
+
+  /* ---------- Library ---------- */
+  .lib-search{margin-bottom:14px;}
+  .empty-state{
+    text-align:center;padding:40px 16px;color:#6b675e;
+  }
+  .empty-state .es-icon{font-size:34px;margin-bottom:8px;}
+  .series-card{background:#fff;border:1.5px solid var(--sumi);box-shadow:3px 3px 0 var(--sumi);margin-bottom:14px;}
+  .series-head{display:flex;gap:10px;padding:12px;cursor:pointer;align-items:center;}
+  .series-head img{width:44px;height:62px;object-fit:cover;border:1px solid var(--sumi);flex-shrink:0;background:var(--nezumi);}
+  .series-head .sh-info{flex:1;min-width:0;}
+  .series-head .sh-title{font-weight:700;font-size:14.5px;line-height:1.25;}
+  .series-head .sh-sub{font-family:'JetBrains Mono',monospace;font-size:11px;color:#6b675e;margin-top:3px;}
+  .progress-bar{height:5px;background:var(--washi-dim);margin-top:6px;position:relative;border:1px solid var(--sumi);}
+  .progress-bar i{position:absolute;top:0;left:0;bottom:0;background:var(--beni);}
+  .series-body{border-top:1px solid var(--sumi);padding:12px;background:var(--washi);}
+  .vol-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(38px,1fr));gap:6px;}
+  .vol-slot{
+    aspect-ratio:2/3;
+    border:1.5px solid var(--sumi);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'JetBrains Mono',monospace;font-weight:700;font-size:12px;
+    cursor:pointer;position:relative;user-select:none;
+  }
+  .vol-slot.owned{background:var(--sumi);color:var(--washi);}
+  .vol-slot.missing{
+    background-image:radial-gradient(var(--nezumi) 1px, transparent 1px);
+    background-size:5px 5px;
+    background-color:#fff;
+    color:#8a8578;
+    border-style:dashed;
+  }
+  .stamp{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    color:var(--beni);font-size:9px;font-weight:900;border:2px solid var(--beni);border-radius:50%;
+    background:rgba(255,255,255,0.0);
+    opacity:0;transform:scale(1.6) rotate(-14deg);
+    pointer-events:none;
+  }
+  .vol-slot.owned.stamped .stamp{animation:stampin 0.32s ease-out forwards;}
+  @keyframes stampin{to{opacity:1;transform:scale(1) rotate(-14deg);}}
+  .series-actions{display:flex;gap:8px;margin-top:12px;}
+  .set-total-row{display:flex;gap:8px;align-items:center;margin-bottom:10px;}
+  .set-total-row input{width:70px;}
+
+  footer.note{padding:14px 16px 30px;font-size:11px;color:#8a8578;line-height:1.6;text-align:center;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="masthead">
+    <span class="kicker">manga library scanner</span>
+    <h1><span class="jp">蔵書</span>KURAZŌ</h1>
+    <p>Inquadra il dorso o il codice a barre: teniamo il conto di cosa hai e cosa ti manca.</p>
+  </div>
+
+  <nav class="tabs">
+    <button data-view="library" class="active"><span>Scaffale</span><span class="tnum" id="tab-count">0 serie</span></button>
+    <button data-view="ocr"><span>Scansiona dorso</span><span class="tnum">OCR</span></button>
+    <button data-view="barcode"><span>Scansiona ISBN</span><span class="tnum">barcode</span></button>
+    <button data-view="manual"><span>Aggiungi</span><span class="tnum">manuale</span></button>
+  </nav>
+
+  <main id="view-root"></main>
+
+  <footer class="note">Dati salvati solo su questo dispositivo/account · Riconoscimento testo e serie sono automatici ma sempre da confermare prima di salvare.</footer>
+</div>
+
+<script>
+(function(){
+
+/* ===================== STORAGE ===================== */
+async function loadLibrary(){
+  try{
+    const res = await window.storage.get('library', false);
+    if(res && res.value) return JSON.parse(res.value);
+  }catch(e){ /* key not found yet */ }
+  return {};
+}
+async function saveLibrary(lib){
+  try{ await window.storage.set('library', JSON.stringify(lib), false); }
+  catch(e){ console.error('storage error', e); }
+}
+
+let LIB = {}; // { [seriesKey]: {title, cover, total, owned:[nums], source} }
+
+/* ===================== HELPERS ===================== */
+function seriesKeyFromTitle(t){
+  return t.toLowerCase().normalize('NFKD').replace(/[^\w]+/g,'').slice(0,60) || ('s'+Date.now());
+}
+function extractVolumeNumber(text){
+  if(!text) return null;
+  const patterns = [
+    /vol(?:ume)?\.?\s*(\d{1,3})/i,
+    /n[°.]?\s*(\d{1,3})/i,
+    /#\s*(\d{1,3})/,
+    /\b(\d{1,3})\b(?!.*\b\d{1,3}\b)/ // last standalone number in string
+  ];
+  for(const p of patterns){
+    const m = text.match(p);
+    if(m) return parseInt(m[1],10);
+  }
+  return null;
+}
+function guessTitleFromOcr(rawText){
+  if(!rawText) return '';
+  const lines = rawText.split('\n').map(l=>l.trim()).filter(l=>l.length>1);
+  if(!lines.length) return '';
+  // strip volume-only lines, pick the longest remaining line as title guess
+  const candidates = lines.filter(l=>!/^vol(?:ume)?\.?\s*\d{1,3}$/i.test(l) && !/^\d{1,3}$/.test(l));
+  const pool = candidates.length? candidates : lines;
+  pool.sort((a,b)=>b.length-a.length);
+  return pool[0];
+}
+function escapeHtml(s){
+  return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function isValidEan13(code){
+  if(!/^\d{13}$/.test(code)) return false;
+  let sum = 0;
+  for(let i=0;i<12;i++){
+    const d = parseInt(code[i],10);
+    sum += (i%2===0)? d : d*3;
+  }
+  const check = (10 - (sum%10))%10;
+  return check === parseInt(code[12],10);
+}
+
+/* ===================== ANILIST SEARCH ===================== */
+async function searchAniList(query){
+  const gql = `query ($search: String) {
+    Page(perPage: 6) {
+      media(search: $search, type: MANGA, sort: SEARCH_MATCH) {
+        id
+        title { romaji english native }
+        volumes
+        coverImage { medium }
+        startDate { year }
+        format
+      }
+    }
+  }`;
+  try{
+    const r = await fetch('https://graphql.anilist.co', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body: JSON.stringify({query: gql, variables:{search: query}})
+    });
+    if(!r.ok) throw new Error('AniList HTTP '+r.status);
+    const data = await r.json();
+    return (data && data.data && data.data.Page && data.data.Page.media) || [];
+  }catch(e){
+    console.error('AniList search failed', e);
+    return null; // signal failure vs empty
+  }
+}
+
+/* ===================== GOOGLE BOOKS (ISBN) ===================== */
+// Riprova automaticamente in caso di errore di rete/HTTP (fino a maxAttempts).
+// Se la richiesta va a buon fine ma non trova risultati, ritorna null (nessun retry: non è un errore).
+// Se fallisce definitivamente dopo i retry, lancia un'eccezione (per distinguere "non trovato" da "servizio irraggiungibile").
+async function lookupIsbn(isbn, onRetry, attempt){
+  attempt = attempt || 1;
+  const maxAttempts = 3;
+  let r;
+  try{
+    r = await fetch('https://www.googleapis.com/books/v1/volumes?q=isbn:'+encodeURIComponent(isbn));
+  }catch(networkErr){
+    console.error('ISBN lookup: errore di rete (tentativo '+attempt+')', networkErr);
+    if(attempt < maxAttempts){
+      if(typeof onRetry==='function') onRetry(attempt+1, maxAttempts);
+      await new Promise(res=>setTimeout(res, 600*attempt));
+      return lookupIsbn(isbn, onRetry, attempt+1);
+    }
+    throw new Error('network');
+  }
+  if(!r.ok){
+    console.error('ISBN lookup: HTTP '+r.status+' (tentativo '+attempt+')');
+    if(attempt < maxAttempts){
+      if(typeof onRetry==='function') onRetry(attempt+1, maxAttempts);
+      await new Promise(res=>setTimeout(res, 600*attempt));
+      return lookupIsbn(isbn, onRetry, attempt+1);
+    }
+    throw new Error('http-'+r.status);
+  }
+  const data = await r.json();
+  if(!data.items || !data.items.length) return null; // richiesta riuscita, nessun libro trovato
+  const info = data.items[0].volumeInfo;
+  return {
+    title: info.title + (info.subtitle? ' '+info.subtitle : ''),
+    thumb: info.imageLinks && (info.imageLinks.thumbnail || info.imageLinks.smallThumbnail),
+    isbn
+  };
+}
+
+/* ===================== LIBRARY MUTATIONS ===================== */
+async function addVolumeToLibrary({seriesTitle, coverImage, totalVolumes, volumeNumber}){
+  const key = seriesKeyFromTitle(seriesTitle);
+  if(!LIB[key]){
+    LIB[key] = { title: seriesTitle, cover: coverImage||null, total: totalVolumes||null, owned: [] };
+  }
+  if(coverImage && !LIB[key].cover) LIB[key].cover = coverImage;
+  if(totalVolumes && !LIB[key].total) LIB[key].total = totalVolumes;
+  if(volumeNumber && !LIB[key].owned.includes(volumeNumber)){
+    LIB[key].owned.push(volumeNumber);
+    LIB[key].owned.sort((a,b)=>a-b);
+  }
+  await saveLibrary(LIB);
+  return key;
+}
+
+/* ===================== VIEW ROUTER ===================== */
+let currentView = 'library';
+const root = document.getElementById('view-root');
+const tabButtons = document.querySelectorAll('.tabs button');
+tabButtons.forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    stopAllCameras();
+    setView(btn.dataset.view);
+  });
+});
+function setView(v){
+  currentView = v;
+  tabButtons.forEach(b=>b.classList.toggle('active', b.dataset.view===v));
+  render();
+}
+function updateTabCount(){
+  const n = Object.keys(LIB).length;
+  document.getElementById('tab-count').textContent = n + (n===1?' serie':' serie');
+}
+
+function render(){
+  root.innerHTML = '';
+  if(currentView==='library') renderLibrary();
+  else if(currentView==='ocr') renderOcr();
+  else if(currentView==='barcode') renderBarcode();
+  else if(currentView==='manual') renderManual();
+}
+
+/* ===================== LIBRARY VIEW ===================== */
+function renderLibrary(){
+  updateTabCount();
+  const keys = Object.keys(LIB);
+  if(!keys.length){
+    root.innerHTML = `
+      <div class="empty-state">
+        <div class="es-icon">📚</div>
+        <div><b>Lo scaffale è vuoto.</b></div>
+        <div class="hint" style="margin-top:6px;">Scansiona un dorso o un codice a barre per iniziare a riempirlo.</div>
+      </div>`;
+    return;
+  }
+  const wrap = document.createElement('div');
+  keys.sort((a,b)=> LIB[a].title.localeCompare(LIB[b].title));
+  keys.forEach(key=>{
+    const s = LIB[key];
+    const total = s.total || null;
+    const ownedCount = s.owned.length;
+    const pct = total ? Math.round(100*Math.min(ownedCount,total)/total) : null;
+    const card = document.createElement('div');
+    card.className = 'series-card';
+    card.innerHTML = `
+      <div class="series-head" data-key="${key}">
+        ${s.cover? `<img src="${s.cover}" alt="">` : `<div style="width:44px;height:62px;background:var(--nezumi);border:1px solid var(--sumi);flex-shrink:0;"></div>`}
+        <div class="sh-info">
+          <div class="sh-title">${escapeHtml(s.title)}</div>
+          <div class="sh-sub">${total? (ownedCount+' / '+total+' volumi') : (ownedCount+' volumi · totale sconosciuto')}</div>
+          ${total? `<div class="progress-bar"><i style="width:${pct}%"></i></div>` : ''}
+        </div>
+      </div>
+      <div class="series-body" style="display:none;"></div>
+    `;
+    wrap.appendChild(card);
+    const head = card.querySelector('.series-head');
+    const body = card.querySelector('.series-body');
+    head.addEventListener('click', ()=>{
+      const open = body.style.display !== 'none';
+      body.style.display = open? 'none':'block';
+      if(!open) renderSeriesBody(body, key);
+    });
+  });
+  root.appendChild(wrap);
+}
+
+function renderSeriesBody(container, key){
+  const s = LIB[key];
+  container.innerHTML = '';
+  if(!s.total){
+    const row = document.createElement('div');
+    row.className = 'set-total-row';
+    row.innerHTML = `<label style="margin:0;">Totale volumi</label><input type="number" min="1" max="999" placeholder="es. 24" id="tot-${key}"><button class="btn small">Imposta</button>`;
+    row.querySelector('button').addEventListener('click', async ()=>{
+      const v = parseInt(row.querySelector('input').value,10);
+      if(v>0){ s.total = v; await saveLibrary(LIB); renderSeriesBody(container,key); renderLibrary(); }
+    });
+    container.appendChild(row);
+  }
+  const grid = document.createElement('div');
+  grid.className = 'vol-grid';
+  const maxShow = s.total || Math.max(...s.owned, 0);
+  for(let i=1;i<=maxShow;i++){
+    const owned = s.owned.includes(i);
+    const slot = document.createElement('div');
+    slot.className = 'vol-slot ' + (owned?'owned':'missing');
+    slot.innerHTML = `${i}${owned? '<span class="stamp">OK</span>':''}`;
+    slot.addEventListener('click', async ()=>{
+      const idx = s.owned.indexOf(i);
+      if(idx>=0){ s.owned.splice(idx,1); }
+      else{ s.owned.push(i); s.owned.sort((a,b)=>a-b); }
+      await saveLibrary(LIB);
+      renderSeriesBody(container,key);
+      renderLibrary();
+    });
+    grid.appendChild(slot);
+  }
+  container.appendChild(grid);
+  if(s.owned.some(n=>n>0)){
+    setTimeout(()=>{
+      container.querySelectorAll('.vol-slot.owned').forEach(el=>el.classList.add('stamped'));
+    },10);
+  }
+  const actions = document.createElement('div');
+  actions.className = 'series-actions';
+  actions.innerHTML = `<button class="btn ghost small" data-act="del">Rimuovi serie dallo scaffale</button>`;
+  actions.querySelector('[data-act=del]').addEventListener('click', async ()=>{
+    if(confirm('Rimuovere "'+s.title+'" e tutti i volumi registrati?')){
+      delete LIB[key];
+      await saveLibrary(LIB);
+      renderLibrary();
+    }
+  });
+  container.appendChild(actions);
+}
+
+/* ===================== CAMERA HELPERS (shared) ===================== */
+let activeStream = null;
+let activeDetectionTimer = null;
+async function startCamera(videoEl){
+  stopAllCameras();
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video:{ facingMode:{ ideal:'environment' }, width:{ideal:1280}, height:{ideal:960} },
+    audio:false
+  });
+  activeStream = stream;
+  videoEl.srcObject = stream;
+  await videoEl.play();
+  return stream;
+}
+function stopAllCameras(){
+  if(activeStream){
+    activeStream.getTracks().forEach(t=>t.stop());
+    activeStream = null;
+  }
+  if(activeDetectionTimer){
+    clearInterval(activeDetectionTimer);
+    activeDetectionTimer = null;
+  }
+  try{ if(window.Quagga) Quagga.stop(); }catch(e){}
+}
+
+/* ===================== OCR VIEW ===================== */
+function renderOcr(){
+  root.innerHTML = `
+    <div class="panel">
+      <p class="hint"><b>Scansiona il dorso o la copertina.</b> Funziona meglio con testo latino ben illuminato (edizioni italiane/inglesi); allinea il titolo sulla linea rossa. Per titoli in kanji conviene la ricerca manuale.</p>
+      <div class="camera-wrap" id="cam-wrap">
+        <div class="cam-placeholder">Attivazione fotocamera…</div>
+      </div>
+      <div class="cam-actions">
+        <button class="btn primary" id="btn-capture" disabled>Scatta e leggi</button>
+      </div>
+      <div id="ocr-status"></div>
+      <div id="ocr-result"></div>
+    </div>
+  `;
+  const camWrap = document.getElementById('cam-wrap');
+  const statusEl = document.getElementById('ocr-status');
+  const resultEl = document.getElementById('ocr-result');
+  const captureBtn = document.getElementById('btn-capture');
+
+  const video = document.createElement('video');
+  video.setAttribute('playsinline','');
+  video.muted = true;
+  const canvas = document.createElement('canvas');
+
+  startCamera(video).then(()=>{
+    camWrap.innerHTML = '';
+    camWrap.appendChild(video);
+    const gl = document.createElement('div'); gl.className='guide-line'; camWrap.appendChild(gl);
+    ['c-tl','c-tr','c-bl','c-br'].forEach(c=>{ const d=document.createElement('div'); d.className='corner '+c; camWrap.appendChild(d); });
+    const cap = document.createElement('div'); cap.className='camera-caption'; cap.textContent='Allinea il dorso sulla linea rossa'; camWrap.appendChild(cap);
+    camWrap.appendChild(canvas);
+    captureBtn.disabled = false;
+  }).catch(err=>{
+    camWrap.innerHTML = `<div class="cam-placeholder">Impossibile accedere alla fotocamera.<br>${escapeHtml(err.message||'')}<br>Controlla i permessi del browser.</div>`;
+  });
+
+  captureBtn.addEventListener('click', async ()=>{
+    captureBtn.disabled = true;
+    statusEl.innerHTML = `<div class="status-line">Lettura del testo in corso…</div>`;
+    resultEl.innerHTML = '';
+    const w = video.videoWidth, h = video.videoHeight;
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video,0,0,w,h);
+
+    let ocrText = '';
+    let ocrFailed = false;
+    try{
+      if(!window.Tesseract) throw new Error('motore OCR non disponibile');
+      const result = await new Promise((resolve,reject)=>{
+        try{
+          const job = Tesseract.recognize(canvas, {lang:'eng'});
+          if(job && typeof job.then === 'function'){
+            job.then(resolve).catch(reject);
+          } else {
+            reject(new Error('interfaccia OCR inattesa'));
+          }
+        }catch(e){ reject(e); }
+      });
+      ocrText = (result && result.text) || (result && result.data && result.data.text) || '';
+    }catch(e){
+      console.error('OCR error', e);
+      ocrFailed = true;
+    }
+    captureBtn.disabled = false;
+
+    if(ocrFailed || !ocrText.trim()){
+      statusEl.innerHTML = `<div class="status-line err">Non sono riuscito a leggere testo utile dall'immagine. Correggi manualmente qui sotto.</div>`;
+    } else {
+      statusEl.innerHTML = `<div class="status-line ok">Testo rilevato. Controlla e correggi prima di cercare la serie.</div>`;
+    }
+    const guessedTitle = guessTitleFromOcr(ocrText);
+    const guessedVol = extractVolumeNumber(ocrText);
+    showOcrConfirmForm(resultEl, guessedTitle, guessedVol);
+  });
+}
+
+function showOcrConfirmForm(container, guessedTitle, guessedVol){
+  container.innerHTML = `
+    <label>Titolo rilevato</label>
+    <input type="text" id="f-title" value="${escapeHtml(guessedTitle||'')}" placeholder="es. One Piece">
+    <label>Numero volume</label>
+    <input type="number" id="f-vol" min="1" max="999" value="${guessedVol||''}" placeholder="es. 12">
+    <div class="cam-actions">
+      <button class="btn primary" id="f-search">Cerca la serie</button>
+    </div>
+    <div id="f-candidates"></div>
+  `;
+  container.querySelector('#f-search').addEventListener('click', async ()=>{
+    const title = container.querySelector('#f-title').value.trim();
+    const vol = parseInt(container.querySelector('#f-vol').value,10) || null;
+    if(!title){ alert('Inserisci almeno un titolo da cercare.'); return; }
+    await runSeriesSearch(container.querySelector('#f-candidates'), title, vol);
+  });
+}
+
+async function runSeriesSearch(candContainer, title, vol){
+  candContainer.innerHTML = `<div class="status-line">Cerco "${escapeHtml(title)}" nel database manga…</div>`;
+  const results = await searchAniList(title);
+  if(results === null){
+    candContainer.innerHTML = `
+      <div class="status-line err">Ricerca serie non disponibile in questo momento.</div>
+      <div class="cam-actions"><button class="btn primary" id="add-anyway">Aggiungi comunque "${escapeHtml(title)}" con questi dati</button></div>`;
+    candContainer.querySelector('#add-anyway').addEventListener('click', async ()=>{
+      await addVolumeToLibrary({seriesTitle:title, volumeNumber:vol});
+      confirmAdded(candContainer, title, vol);
+    });
+    return;
+  }
+  if(!results.length){
+    candContainer.innerHTML = `
+      <div class="status-line">Nessuna corrispondenza trovata nel database.</div>
+      <div class="cam-actions"><button class="btn primary" id="add-anyway">Aggiungi comunque "${escapeHtml(title)}"</button></div>`;
+    candContainer.querySelector('#add-anyway').addEventListener('click', async ()=>{
+      await addVolumeToLibrary({seriesTitle:title, volumeNumber:vol});
+      confirmAdded(candContainer, title, vol);
+    });
+    return;
+  }
+  candContainer.innerHTML = `<div class="hint" style="margin:10px 0 0;">Seleziona la serie corretta:</div>`;
+  results.forEach(m=>{
+    const name = (m.title.romaji || m.title.english || m.title.native);
+    const el = document.createElement('div');
+    el.className = 'cand';
+    el.innerHTML = `
+      ${m.coverImage && m.coverImage.medium? `<img src="${m.coverImage.medium}">` : `<div style="width:42px;height:60px;background:var(--nezumi);border:1px solid var(--sumi);"></div>`}
+      <div class="ci">
+        <div class="t">${escapeHtml(name)}</div>
+        <div class="m">${m.volumes? m.volumes+' volumi tot.':'tot. sconosciuto'}${m.startDate&&m.startDate.year? ' · '+m.startDate.year:''}</div>
+      </div>`;
+    el.addEventListener('click', async ()=>{
+      await addVolumeToLibrary({
+        seriesTitle: name,
+        coverImage: m.coverImage && m.coverImage.medium,
+        totalVolumes: m.volumes || null,
+        volumeNumber: vol
+      });
+      confirmAdded(candContainer, name, vol);
+    });
+    candContainer.appendChild(el);
+  });
+}
+
+function confirmAdded(container, title, vol){
+  renderLibrary(); // refresh badge count silently in background
+  container.innerHTML = `<div class="status-line ok">✔ ${escapeHtml(title)}${vol? ' — vol. '+vol:''} aggiunto allo scaffale.</div>
+    <div class="cam-actions"><button class="btn primary" id="scan-next">Scansiona il prossimo</button></div>`;
+  container.querySelector('#scan-next').addEventListener('click', ()=> setView(currentView));
+}
+
+/* ===================== BARCODE VIEW ===================== */
+function renderBarcode(){
+  root.innerHTML = `
+    <div class="panel">
+      <p class="hint"><b>Inquadra il codice a barre ISBN</b> (di solito sul retro del volume). Il rilevamento è automatico e continuo.</p>
+      <div class="camera-wrap" id="bc-wrap">
+        <div class="cam-placeholder">Attivazione fotocamera…</div>
+      </div>
+      <div id="bc-status"></div>
+      <div id="bc-result"></div>
+    </div>
+  `;
+  const wrap = document.getElementById('bc-wrap');
+  const statusEl = document.getElementById('bc-status');
+  const resultEl = document.getElementById('bc-result');
+
+  if(!window.Quagga){
+    wrap.innerHTML = `<div class="cam-placeholder">Motore di scansione barcode non disponibile.</div>`;
+    return;
+  }
+
+  let started = false;
+  const startTimeout = setTimeout(()=>{
+    if(!started){
+      wrap.innerHTML = `<div class="cam-placeholder">La fotocamera non risponde.<br>Controlla che il permesso sia concesso per questo sito (icona lucchetto accanto all'indirizzo) e ricarica la pagina.</div>`;
+    }
+  }, 9000);
+
+  wrap.innerHTML = ''; // rimuove il placeholder "Attivazione fotocamera…" prima di montare il video
+
+  Quagga.init({
+    inputStream:{
+      name:'Live',
+      type:'LiveStream',
+      target: wrap,
+      constraints:{ facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:960} }
+    },
+    locator:{ patchSize:'medium', halfSample:true },
+    numOfWorkers: navigator.hardwareConcurrency? Math.min(4,navigator.hardwareConcurrency):2,
+    frequency: 10,
+    decoder:{ readers:['ean_reader'] },
+    locate:true
+  }, function(err){
+    started = true;
+    clearTimeout(startTimeout);
+    if(err){
+      console.error(err);
+      wrap.innerHTML = `<div class="cam-placeholder">Impossibile accedere alla fotocamera.<br>${escapeHtml((err&&err.message)||'')}<br>Controlla i permessi del browser per questo sito.</div>`;
+      return;
+    }
+    Quagga.start();
+    const v = wrap.querySelector('video');
+    if(v){ v.style.width='100%'; v.style.height='100%'; v.style.objectFit='cover'; }
+    const c = wrap.querySelector('canvas.drawingBuffer');
+    if(c){ c.style.position='absolute'; c.style.top='0'; c.style.left='0'; c.style.width='100%'; c.style.height='100%'; }
+    ['c-tl','c-tr','c-bl','c-br'].forEach(cc=>{ const d=document.createElement('div'); d.className='corner '+cc; wrap.appendChild(d); });
+    const cap = document.createElement('div'); cap.className='camera-caption'; cap.textContent='In ricerca del codice a barre…'; wrap.appendChild(cap);
+    statusEl.innerHTML = `<div class="status-line">Scansione attiva.</div>`;
+
+    // Timer di inattività: se non arriva nessuna lettura per un po', suggerisce come migliorare l'inquadratura
+    // invece di lasciare l'utente a fissare uno schermo silenzioso.
+    activeDetectionTimer = setInterval(()=>{
+      if(locked) return;
+      const idleMs = Date.now() - lastActivityTime;
+      if(idleMs > 7000 && !noDetectionHintShown){
+        noDetectionHintShown = true;
+        statusEl.innerHTML = `<div class="status-line">Non rilevo ancora nessun codice. Prova ad avvicinare o allontanare leggermente il volume, inquadra bene il barcode sulla linea e verifica di avere abbastanza luce.</div>`;
+      }
+    }, 2000);
+  });
+
+  let locked = false;
+  let lastSeenCode = null;
+  let sameCodeCount = 0;
+  let nonIsbnNotifiedCode = null;
+  let lastActivityTime = Date.now();
+  let noDetectionHintShown = false;
+  Quagga.onDetected(async (data)=>{
+    if(locked) return;
+    const code = data && data.codeResult && data.codeResult.code;
+    if(!code) return;
+    // scarta letture corrotte/rumore: deve essere un EAN-13 con checksum valido
+    if(!isValidEan13(code)) return;
+    lastActivityTime = Date.now();
+    noDetectionHintShown = false;
+
+    if(!/^97[89]\d{10}$/.test(code)){
+      // è un codice a barre valido, ma non un ISBN di libro (prodotto generico inquadrato per errore)
+      if(code === lastSeenCode){ sameCodeCount++; } else { lastSeenCode = code; sameCodeCount = 1; }
+      if(sameCodeCount >= 2 && nonIsbnNotifiedCode !== code){
+        nonIsbnNotifiedCode = code;
+        statusEl.innerHTML = `<div class="status-line err">Il codice a barre rilevato (${code}) non è un ISBN di un libro (non inizia con 978/979). Sembra un altro prodotto: inquadra il codice a barre sul retro del volume manga.</div>`;
+      }
+      return;
+    }
+    lastSeenCode = code; sameCodeCount = 0; nonIsbnNotifiedCode = null;
+
+    locked = true;
+    if(activeDetectionTimer){ clearInterval(activeDetectionTimer); activeDetectionTimer = null; }
+    Quagga.stop();
+    statusEl.innerHTML = `<div class="status-line ok">Codice rilevato: ${code}. Cerco il volume…</div>`;
+    resultEl.innerHTML = '';
+    let book = null;
+    let lookupFailed = false;
+    try{
+      book = await lookupIsbn(code, (attempt, max)=>{
+        statusEl.innerHTML = `<div class="status-line">Connessione al database libri non riuscita, riprovo… (tentativo ${attempt}/${max})</div>`;
+      });
+    }catch(e){
+      console.error('Lookup ISBN definitivamente fallita dopo i tentativi', e);
+      lookupFailed = true;
+    }
+    if(!book){
+      resultEl.innerHTML = `
+        <div class="status-line err">${lookupFailed? 'Impossibile contattare il database libri dopo vari tentativi. Controlla la connessione oppure inserisci il titolo a mano.' : 'ISBN non trovato nel database libri.'}</div>
+        <label>Titolo (inserisci manualmente)</label>
+        <input type="text" id="bc-title" placeholder="es. One Piece Vol. 12">
+        <div class="cam-actions"><button class="btn primary" id="bc-retry">Riprova scansione</button><button class="btn" id="bc-manual">Cerca con questo titolo</button></div>`;
+      resultEl.querySelector('#bc-retry').addEventListener('click', ()=> renderBarcode());
+      resultEl.querySelector('#bc-manual').addEventListener('click', async ()=>{
+        const t = resultEl.querySelector('#bc-title').value.trim();
+        if(!t) return;
+        const vol = extractVolumeNumber(t);
+        const title = t.replace(/vol(?:ume)?\.?\s*\d{1,3}/i,'').trim();
+        await runSeriesSearch(resultEl, title||t, vol);
+      });
+      return;
+    }
+    const guessedVol = extractVolumeNumber(book.title);
+    const cleanTitle = book.title.replace(/[,:\-]?\s*vol(?:ume)?\.?\s*\d{1,3}.*$/i,'').trim();
+    resultEl.innerHTML = `
+      <div class="status-line ok">Trovato: ${escapeHtml(book.title)}</div>
+      <label>Titolo serie</label>
+      <input type="text" id="f-title" value="${escapeHtml(cleanTitle||book.title)}">
+      <label>Numero volume</label>
+      <input type="number" id="f-vol" min="1" max="999" value="${guessedVol||''}">
+      <div class="cam-actions"><button class="btn primary" id="f-search">Cerca la serie</button></div>
+      <div id="f-candidates"></div>
+    `;
+    resultEl.querySelector('#f-search').addEventListener('click', async ()=>{
+      const title = resultEl.querySelector('#f-title').value.trim();
+      const vol = parseInt(resultEl.querySelector('#f-vol').value,10) || null;
+      await runSeriesSearch(resultEl.querySelector('#f-candidates'), title, vol);
+    });
+  });
+}
+
+/* ===================== MANUAL VIEW ===================== */
+function renderManual(){
+  root.innerHTML = `
+    <div class="panel">
+      <p class="hint">Cerca una serie per titolo e segna i volumi che possiedi, senza fotocamera.</p>
+      <label>Titolo serie</label>
+      <input type="text" id="m-title" placeholder="es. Jujutsu Kaisen">
+      <div class="cam-actions"><button class="btn primary" id="m-search">Cerca</button></div>
+      <div id="m-candidates"></div>
+    </div>
+  `;
+  const input = document.getElementById('m-title');
+  const go = async ()=>{
+    const t = input.value.trim();
+    if(!t) return;
+    await runSeriesSearch(document.getElementById('m-candidates'), t, null);
+  };
+  document.getElementById('m-search').addEventListener('click', go);
+  input.addEventListener('keydown', e=>{ if(e.key==='Enter') go(); });
+}
+
+/* ===================== INIT ===================== */
+(async function init(){
+  LIB = await loadLibrary();
+  render();
+})();
+
+})();
+</script>
+</body>
+</html>
