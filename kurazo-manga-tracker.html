@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&family=Zen+Maru+Gothic:wght@400;500;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/0.1.1/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <style>
   :root{
     --sumi:#14120f;       /* ink black */
@@ -259,44 +259,6 @@
   .set-total-row{display:flex;gap:8px;align-items:center;margin-bottom:10px;}
   .set-total-row input{width:70px;}
 
-  .sh-cover{cursor:pointer;position:relative;}
-  .sh-cover::after{
-    content:'☰';
-    position:absolute;bottom:-1px;right:-1px;
-    background:var(--sumi);color:var(--washi);
-    font-size:9px;line-height:1;padding:2px 3px;
-    border:1px solid var(--washi);
-  }
-
-  /* ---------- Tenda (storico volumi) ---------- */
-  .tenda-overlay{
-    position:fixed;inset:0;z-index:1000;
-    background:rgba(20,18,15,0.55);
-    display:flex;align-items:flex-start;justify-content:center;
-  }
-  .tenda-panel{
-    background:var(--washi);
-    width:100%;max-width:640px;max-height:82vh;
-    overflow-y:auto;
-    border-bottom:2px solid var(--sumi);
-    box-shadow:0 6px 0 var(--sumi);
-    padding:16px;
-    transform:translateY(-100%);
-    animation:tenda-drop 0.26s cubic-bezier(.2,.8,.3,1) forwards;
-  }
-  @keyframes tenda-drop{ to{ transform:translateY(0); } }
-  .tenda-head{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid var(--sumi);}
-  .tenda-head img{width:40px;height:56px;object-fit:cover;border:1px solid var(--sumi);flex-shrink:0;}
-  .tenda-head .th-title{font-weight:700;font-size:15px;flex:1;line-height:1.25;}
-  .tenda-close{border:1.5px solid var(--sumi);background:var(--washi);color:var(--sumi);cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:11px;padding:7px 10px;box-shadow:2px 2px 0 var(--sumi);flex-shrink:0;}
-  .tenda-close:active{transform:translate(2px,2px);box-shadow:none;}
-  .log-entry{display:flex;align-items:center;gap:10px;border:1px solid var(--sumi);background:#fff;padding:8px 10px;margin-bottom:6px;}
-  .log-entry .le-vol{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;background:var(--sumi);color:var(--washi);min-width:30px;text-align:center;padding:5px 0;flex-shrink:0;}
-  .log-entry .le-info{flex:1;min-width:0;}
-  .log-entry .le-date{font-family:'JetBrains Mono',monospace;font-size:11px;color:#6b675e;}
-  .le-source{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:0.04em;background:var(--ai);color:var(--washi);padding:2px 5px;border-radius:2px;margin-left:6px;vertical-align:middle;}
-  .log-empty{text-align:center;padding:22px 10px;color:#6b675e;font-size:13px;line-height:1.5;}
-
   footer.note{padding:14px 16px 30px;font-size:11px;color:#8a8578;line-height:1.6;text-align:center;}
 </style>
 </head>
@@ -460,75 +422,21 @@ async function lookupIsbn(isbn){
 }
 
 /* ===================== LIBRARY MUTATIONS ===================== */
-async function addVolumeToLibrary({seriesTitle, coverImage, totalVolumes, volumeNumber, publisher, source}){
+async function addVolumeToLibrary({seriesTitle, coverImage, totalVolumes, volumeNumber, publisher}){
   const pub = publisher? normalizePublisherLabel(publisher) : null;
   const key = seriesKeyFromTitle(seriesTitle, pub);
   if(!LIB[key]){
-    LIB[key] = { title: seriesTitle, publisher: pub, cover: coverImage||null, total: totalVolumes||null, owned: [], log: [] };
+    LIB[key] = { title: seriesTitle, publisher: pub, cover: coverImage||null, total: totalVolumes||null, owned: [] };
   }
-  if(!LIB[key].log) LIB[key].log = [];
   if(pub && !LIB[key].publisher) LIB[key].publisher = pub;
   if(coverImage && !LIB[key].cover) LIB[key].cover = coverImage;
   if(totalVolumes && !LIB[key].total) LIB[key].total = totalVolumes;
-  if(volumeNumber){
-    if(!LIB[key].owned.includes(volumeNumber)){
-      LIB[key].owned.push(volumeNumber);
-      LIB[key].owned.sort((a,b)=>a-b);
-    }
-    // registra ogni scansione/aggiunta nello storico, anche se il volume era già posseduto
-    LIB[key].log.push({num: volumeNumber, date: Date.now(), source: source || 'manuale'});
-    LIB[key].log.sort((a,b)=>b.date-a.date);
+  if(volumeNumber && !LIB[key].owned.includes(volumeNumber)){
+    LIB[key].owned.push(volumeNumber);
+    LIB[key].owned.sort((a,b)=>a-b);
   }
   await saveLibrary(LIB);
   return key;
-}
-
-/* ===================== STORICO VOLUMI (tenda) ===================== */
-function sourceLabel(src){
-  if(src==='ocr') return 'dorso';
-  if(src==='barcode') return 'isbn';
-  return 'manuale';
-}
-function formatLogDate(ts){
-  try{
-    return new Date(ts).toLocaleString('it-IT', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  }catch(e){ return ''; }
-}
-function openVolumeLog(key){
-  const s = LIB[key];
-  if(!s) return;
-  const overlay = document.createElement('div');
-  overlay.className = 'tenda-overlay';
-  const entries = (s.log && s.log.length) ? s.log.slice().sort((a,b)=>b.date-a.date) : null;
-  let bodyHtml;
-  if(entries && entries.length){
-    bodyHtml = entries.map(e=>`
-      <div class="log-entry">
-        <div class="le-vol">${e.num}</div>
-        <div class="le-info">
-          <div class="le-date">${formatLogDate(e.date)}<span class="le-source">${sourceLabel(e.source)}</span></div>
-        </div>
-      </div>`).join('');
-  } else if(s.owned && s.owned.length){
-    bodyHtml = `<div class="log-empty">Nessuno storico dettagliato per questi volumi (aggiunti prima di questo aggiornamento).<br><b>Volumi presenti:</b> ${s.owned.join(', ')}</div>`;
-  } else {
-    bodyHtml = `<div class="log-empty">Nessun volume ancora registrato per questa serie.</div>`;
-  }
-  overlay.innerHTML = `
-    <div class="tenda-panel">
-      <div class="tenda-head">
-        ${s.cover? `<img src="${s.cover}" alt="">` : ''}
-        <div class="th-title">${escapeHtml(s.title)}</div>
-        <button class="tenda-close" id="tenda-close">Chiudi ✕</button>
-      </div>
-      ${bodyHtml}
-    </div>
-  `;
-  overlay.addEventListener('click', (e)=>{ if(e.target===overlay) document.body.removeChild(overlay); });
-  document.body.appendChild(overlay);
-  overlay.querySelector('#tenda-close').addEventListener('click', ()=>{
-    if(overlay.parentNode) document.body.removeChild(overlay);
-  });
 }
 
 /* ===================== VIEW ROUTER ===================== */
@@ -583,7 +491,7 @@ function renderLibrary(){
     card.className = 'series-card';
     card.innerHTML = `
       <div class="series-head" data-key="${key}">
-        ${s.cover? `<img class="sh-cover" src="${s.cover}" alt="" title="Vedi storico volumi">` : `<div class="sh-cover" style="width:44px;height:62px;background:var(--nezumi);border:1px solid var(--sumi);flex-shrink:0;" title="Vedi storico volumi"></div>`}
+        ${s.cover? `<img src="${s.cover}" alt="">` : `<div style="width:44px;height:62px;background:var(--nezumi);border:1px solid var(--sumi);flex-shrink:0;"></div>`}
         <div class="sh-info">
           <div class="sh-title">${s.publisher? `<span class="pub-badge">${escapeHtml(s.publisher)}</span>`:''}${escapeHtml(s.title)}</div>
           <div class="sh-sub">${total? (ownedCount+' / '+total+' volumi') : (ownedCount+' volumi · totale sconosciuto')}</div>
@@ -595,11 +503,6 @@ function renderLibrary(){
     wrap.appendChild(card);
     const head = card.querySelector('.series-head');
     const body = card.querySelector('.series-body');
-    const coverEl = card.querySelector('.sh-cover');
-    coverEl.addEventListener('click', (e)=>{
-      e.stopPropagation();
-      openVolumeLog(key);
-    });
     head.addEventListener('click', ()=>{
       const open = body.style.display !== 'none';
       body.style.display = open? 'none':'block';
@@ -643,12 +546,7 @@ function renderSeriesBody(container, key){
     slot.addEventListener('click', async ()=>{
       const idx = s.owned.indexOf(i);
       if(idx>=0){ s.owned.splice(idx,1); }
-      else{
-        s.owned.push(i); s.owned.sort((a,b)=>a-b);
-        if(!s.log) s.log = [];
-        s.log.push({num:i, date:Date.now(), source:'manuale'});
-        s.log.sort((a,b)=>b.date-a.date);
-      }
+      else{ s.owned.push(i); s.owned.sort((a,b)=>a-b); }
       await saveLibrary(LIB);
       renderSeriesBody(container,key);
       renderLibrary();
@@ -763,38 +661,62 @@ function enhanceContrastGrayscale(canvasEl, ctx){
   }catch(e){ /* se l'immagine non è leggibile (cross-origin ecc.) salta il preprocessing */ }
 }
 
-// Esegue l'OCR provando più combinazioni ritaglio/lingua in cascata, così un singolo passaggio
-// che fallisce (lingua non supportata, ritaglio troppo stretto, testo mal posizionato) non fa
-// fallire l'intera scansione: ogni tentativo ha ampie possibilità di successo indipendenti.
+// Worker OCR persistente: creato una sola volta (la prima scansione può richiedere qualche
+// secondo per scaricare motore WASM + dati di lingua), poi riutilizzato per tutte le scansioni
+// successive nella sessione, così scansionare molti volumi di fila resta veloce.
+let ocrWorkerPromise = null;
+let ocrStatusCallback = null;
+function getOcrWorker(){
+  if(!ocrWorkerPromise){
+    ocrWorkerPromise = (async ()=>{
+      if(!window.Tesseract || typeof Tesseract.createWorker !== 'function'){
+        throw new Error('Motore OCR non disponibile (libreria non caricata).');
+      }
+      return await Tesseract.createWorker(['eng','ita'], 1, {
+        logger: (m)=>{
+          if(ocrStatusCallback && m && m.status){
+            const pct = (typeof m.progress === 'number') ? ' '+Math.round(m.progress*100)+'%' : '';
+            ocrStatusCallback(m.status+pct);
+          }
+        }
+      });
+    })();
+    ocrWorkerPromise.catch(()=>{ ocrWorkerPromise = null; }); // permette di ritentare se l'init fallisce
+  }
+  return ocrWorkerPromise;
+}
+
+// Esegue l'OCR sul ritaglio e, se non trova nulla, ritenta sull'immagine intera: un singolo
+// tentativo mal posizionato non fa fallire l'intera scansione.
 async function recognizeWithFallback(cropCanvas, fullCanvas, onAttempt){
+  ocrStatusCallback = onAttempt || null;
+  let worker;
+  try{
+    if(onAttempt) onAttempt('avvio motore OCR');
+    worker = await getOcrWorker();
+  }catch(e){
+    console.error('OCR init failed', e);
+    ocrStatusCallback = null;
+    return {text:'', usedCanvas: cropCanvas, usedLabel: null};
+  }
   const attempts = [
-    {canvas: cropCanvas, lang:'eng+ita', label:'ritaglio · eng+ita'},
-    {canvas: cropCanvas, lang:'eng', label:'ritaglio · eng'},
-    {canvas: fullCanvas, lang:'eng+ita', label:'immagine intera · eng+ita'},
-    {canvas: fullCanvas, lang:'eng', label:'immagine intera · eng'}
+    {canvas: cropCanvas, label:'ritaglio'},
+    {canvas: fullCanvas, label:'immagine intera'}
   ];
   for(const a of attempts){
     if(onAttempt) onAttempt(a.label);
     try{
-      if(!window.Tesseract) throw new Error('motore OCR non disponibile');
-      const result = await new Promise((resolve,reject)=>{
-        try{
-          const job = Tesseract.recognize(a.canvas, {lang:a.lang});
-          if(job && typeof job.then === 'function'){
-            job.then(resolve).catch(reject);
-          } else {
-            reject(new Error('interfaccia OCR inattesa'));
-          }
-        }catch(e){ reject(e); }
-      });
-      const text = (result && result.text) || (result && result.data && result.data.text) || '';
+      const { data } = await worker.recognize(a.canvas);
+      const text = (data && data.text) || '';
       if(text.trim()){
+        ocrStatusCallback = null;
         return {text, usedCanvas: a.canvas, usedLabel: a.label};
       }
     }catch(e){
       console.error('OCR attempt failed ('+a.label+')', e);
     }
   }
+  ocrStatusCallback = null;
   return {text:'', usedCanvas: cropCanvas, usedLabel: null};
 }
 
@@ -802,7 +724,7 @@ async function recognizeWithFallback(cropCanvas, fullCanvas, onAttempt){
 function renderOcr(){
   root.innerHTML = `
     <div class="panel">
-      <p class="hint"><b>Scansiona il dorso o la copertina.</b> Funziona meglio con testo latino ben illuminato (edizioni italiane/inglesi); allinea il titolo sulla linea rossa. Per titoli in kanji conviene la ricerca manuale.</p>
+      <p class="hint"><b>Scansiona il dorso o la copertina.</b> Funziona meglio con testo latino ben illuminato (edizioni italiane/inglesi); allinea il titolo sulla linea rossa. Per titoli in kanji conviene la ricerca manuale. <i>La primissima scansione può richiedere qualche secondo in più (download del motore OCR).</i></p>
       <div class="camera-wrap" id="cam-wrap">
         <div class="cam-placeholder">Attivazione fotocamera…</div>
       </div>
@@ -895,11 +817,11 @@ function showOcrConfirmForm(container, guessedTitle, guessedVol, guessedPublishe
     const vol = parseInt(container.querySelector('#f-vol').value,10) || null;
     const publisher = container.querySelector('#f-publisher').value.trim() || null;
     if(!title){ alert('Inserisci almeno un titolo da cercare.'); return; }
-    await runSeriesSearch(container.querySelector('#f-candidates'), title, vol, publisher, 'ocr');
+    await runSeriesSearch(container.querySelector('#f-candidates'), title, vol, publisher);
   });
 }
 
-async function runSeriesSearch(candContainer, title, vol, publisher, source){
+async function runSeriesSearch(candContainer, title, vol, publisher){
   candContainer.innerHTML = `<div class="status-line">Cerco "${escapeHtml(title)}" nel database manga…</div>`;
   const results = await searchAniList(title);
   if(results === null){
@@ -907,7 +829,7 @@ async function runSeriesSearch(candContainer, title, vol, publisher, source){
       <div class="status-line err">Ricerca serie non disponibile in questo momento.</div>
       <div class="cam-actions"><button class="btn primary" id="add-anyway">Aggiungi comunque "${escapeHtml(title)}" con questi dati</button></div>`;
     candContainer.querySelector('#add-anyway').addEventListener('click', async ()=>{
-      await addVolumeToLibrary({seriesTitle:title, volumeNumber:vol, publisher, source});
+      await addVolumeToLibrary({seriesTitle:title, volumeNumber:vol, publisher});
       confirmAdded(candContainer, title, vol, publisher);
     });
     return;
@@ -917,7 +839,7 @@ async function runSeriesSearch(candContainer, title, vol, publisher, source){
       <div class="status-line">Nessuna corrispondenza trovata nel database.</div>
       <div class="cam-actions"><button class="btn primary" id="add-anyway">Aggiungi comunque "${escapeHtml(title)}"</button></div>`;
     candContainer.querySelector('#add-anyway').addEventListener('click', async ()=>{
-      await addVolumeToLibrary({seriesTitle:title, volumeNumber:vol, publisher, source});
+      await addVolumeToLibrary({seriesTitle:title, volumeNumber:vol, publisher});
       confirmAdded(candContainer, title, vol, publisher);
     });
     return;
@@ -939,8 +861,7 @@ async function runSeriesSearch(candContainer, title, vol, publisher, source){
         coverImage: m.coverImage && m.coverImage.medium,
         totalVolumes: m.volumes || null,
         volumeNumber: vol,
-        publisher,
-        source
+        publisher
       });
       confirmAdded(candContainer, name, vol, publisher);
     });
@@ -1041,7 +962,7 @@ function renderBarcode(){
         const vol = extractVolumeNumber(t);
         const title = t.replace(/vol(?:ume)?\.?\s*\d{1,3}/i,'').trim();
         const publisher = resultEl.querySelector('#bc-publisher').value.trim() || null;
-        await runSeriesSearch(resultEl, title||t, vol, publisher, 'barcode');
+        await runSeriesSearch(resultEl, title||t, vol, publisher);
       });
       return;
     }
@@ -1062,7 +983,7 @@ function renderBarcode(){
       const title = resultEl.querySelector('#f-title').value.trim();
       const vol = parseInt(resultEl.querySelector('#f-vol').value,10) || null;
       const publisher = resultEl.querySelector('#f-publisher').value.trim() || null;
-      await runSeriesSearch(resultEl.querySelector('#f-candidates'), title, vol, publisher, 'barcode');
+      await runSeriesSearch(resultEl.querySelector('#f-candidates'), title, vol, publisher);
     });
   });
 }
@@ -1086,7 +1007,7 @@ function renderManual(){
     const t = input.value.trim();
     if(!t) return;
     const publisher = pubInput.value.trim() || null;
-    await runSeriesSearch(document.getElementById('m-candidates'), t, null, publisher, 'manuale');
+    await runSeriesSearch(document.getElementById('m-candidates'), t, null, publisher);
   };
   document.getElementById('m-search').addEventListener('click', go);
   input.addEventListener('keydown', e=>{ if(e.key==='Enter') go(); });
