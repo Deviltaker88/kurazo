@@ -284,6 +284,10 @@ async function saveLibrary(lib){
 }
 
 let LIB = {}; // { [seriesKey]: {title, cover, total, owned:[nums], source} }
+// Etichetta di build mostrata nell'overlay della fotocamera: serve solo a verificare a colpo d'occhio
+// (da uno screenshot) se il dispositivo sta effettivamente caricando l'ultima versione del file
+// o una copia in cache del browser. Va incrementata manualmente ad ogni nuova versione consegnata.
+const APP_BUILD = '2026-07-04.4';
 // Cache in memoria (solo per la sessione corrente, si azzera al reload) dei risultati di lookupBookByIsbn,
 // per evitare doppie chiamate di rete se lo stesso barcode viene inquadrato più volte di seguito.
 const isbnSessionCache = {};
@@ -748,7 +752,7 @@ function renderOcr(){
     camWrap.appendChild(video);
     const gl = document.createElement('div'); gl.className='guide-line'; camWrap.appendChild(gl);
     ['c-tl','c-tr','c-bl','c-br'].forEach(c=>{ const d=document.createElement('div'); d.className='corner '+c; camWrap.appendChild(d); });
-    const cap = document.createElement('div'); cap.className='camera-caption'; cap.textContent='Allinea il dorso sulla linea rossa'; camWrap.appendChild(cap);
+    const cap = document.createElement('div'); cap.className='camera-caption'; cap.textContent='Allinea il dorso sulla linea rossa · build '+APP_BUILD; camWrap.appendChild(cap);
     camWrap.appendChild(canvas);
     captureBtn.disabled = false;
     const ocrActions = document.querySelector('.cam-actions');
@@ -938,7 +942,7 @@ function renderBarcode(){
     const c = wrap.querySelector('canvas.drawingBuffer');
     if(c){ c.style.position='absolute'; c.style.top='0'; c.style.left='0'; c.style.width='100%'; c.style.height='100%'; }
     ['c-tl','c-tr','c-bl','c-br'].forEach(cc=>{ const d=document.createElement('div'); d.className='corner '+cc; wrap.appendChild(d); });
-    const cap = document.createElement('div'); cap.className='camera-caption'; cap.textContent='In ricerca del codice a barre…'; wrap.appendChild(cap);
+    const cap = document.createElement('div'); cap.className='camera-caption'; cap.textContent='In ricerca del codice a barre… · build '+APP_BUILD; wrap.appendChild(cap);
     statusEl.innerHTML = `<div class="status-line">Scansione attiva.</div>`;
     attachTorchButton(actionsEl, ()=>{
       try{
